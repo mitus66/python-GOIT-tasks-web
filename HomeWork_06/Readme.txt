@@ -4,7 +4,7 @@
 
 Bash
 pip install Faker
-або з терміналу
+
 python create_and_populate_db.py
 
 Це створить файл university.db у тому ж каталозі.
