@@ -4,8 +4,6 @@ python -m pip install "pymongo[srv]==3.12"
 
 2. Створюємо MongoDB в Atlas та отримуємо з`єднання з нею в 
 mongodb+srv://mitus66:Alaska725@cluster0.qzzbjox.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
-(mongodb+srv://mitus66:Alaska725@cluster0.qzzbjox.mongodb.net/mongodb_1?retryWrites=true&w=majority)
-(mongodb+srv://mitus66:Alaska725@cluster0.qzzbjox.mongodb.net/?retryWrites=true&w=majority)
 
 3. Встановіть необхідні бібліотеки:
 pip install mongoengine pymongo Faker
