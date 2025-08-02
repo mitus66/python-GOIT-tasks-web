@@ -1,16 +1,16 @@
-# This is a sample Python script.
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
 
+# uri = "mongodb+srv://mitus66:Alaska725@cluster0.qzzbjox.mongodb.net/mongodb_1?retryWrites=true&w=majority"
+uri = "mongodb+srv://mitus66:Alaska725@cluster0.qzzbjox.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+# Create a new client and connect to the server
+client = MongoClient(uri, server_api=ServerApi('1'))
 
-
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+# Send a ping to confirm a successful connection
+try:
+    client.admin.command('ping')
+    print("Pinged your deployment. You successfully connected to MongoDB!")
+except Exception as e:
+    print(e)

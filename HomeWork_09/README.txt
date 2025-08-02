@@ -1,0 +1,58 @@
+ЧАСТИНА 1
+1. Install pymongo
+python -m pip install "pymongo[srv]==3.12"
+
+2. Створюємо MongoDB в Atlas та отримуємо з`єднання з нею в 
+mongodb+srv://mitus66:Alaska725@cluster0.qzzbjox.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+(mongodb+srv://mitus66:Alaska725@cluster0.qzzbjox.mongodb.net/mongodb_1?retryWrites=true&w=majority)
+(mongodb+srv://mitus66:Alaska725@cluster0.qzzbjox.mongodb.net/?retryWrites=true&w=majority)
+
+3. Встановіть необхідні бібліотеки:
+pip install mongoengine pymongo Faker
+pip install redis
+
+4. Завантажте дані: Запустіть скрипт завантаження даних один раз, щоб заповнити базу даних:
+python load_data.py
+Ви побачите повідомлення про підключення до БД та завантаження авторів/цитат.
+
+5. Запустіть CLI для пошуку: Після успішного завантаження даних, запустіть скрипт пошуку:
+python search_quotes.py
+
+6. Тепер ви можете вводити команди у форматі команда: значення
+(наприклад, name: Albert Einstein, tag: life, tags: life,live)
+та отримувати результати. Для виходу введіть exit.
+__________________________________________________________________________________________
+
+ЧАСТИНА 2
+1. Запустіть Docker контейнер RabbitMQ:
+docker run -d --hostname my-rabbit --name some-rabbit -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+(Порт 5672 - для AMQP, 15672 - для адмін-панелі RabbitMQ Management, яку можна відкрити в браузері за адресою
+http://localhost:15672/ з логіном/паролем guest/guest).
+
+2. Налаштуйте connect.py:
+Переконайтеся, що ви замінили плейсхолдери YOUR_USERNAME, YOUR_PASSWORD, YOUR_CLUSTER_URL, YOUR_DB_NAME
+на ваші реальні дані для підключення до MongoDB Atlas.
+
+3. Встановіть необхідні бібліотеки:
+pip install pika Faker mongoengine
+
+4. Запустіть consumer.py: Відкрийте перший термінал і запустіть:
+python consumer.py
+Він почне очікувати повідомлення.
+
+5. Запустіть producer.py: Відкрийте другий термінал і запустіть:
+python producer.py
+Він згенерує контакти, збереже їх у MongoDB та додасть їхні _id до черги RabbitMQ.
+
+6. Спостерігайте за терміналами:
+У терміналі producer.py ви побачите повідомлення про створення контактів та їх додавання до черги.
+
+У терміналі consumer.py ви побачите повідомлення про отримання _id контактів,
+імітацію надсилання email та оновлення статусу в MongoDB.
+
+7. Перевірте MongoDB Atlas:
+Після виконання скриптів ви можете перевірити колекцію contacts у вашій базі даних MongoDB Atlas.
+Поле is_sent для згенерованих контактів повинно бути True.
+
+Ця реалізація демонструє повний цикл роботи з RabbitMQ для імітації розсилки email,
+включаючи генерацію даних, їх збереження, публікацію повідомлень та їх обробку.
