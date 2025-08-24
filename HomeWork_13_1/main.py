@@ -1,75 +1,24 @@
-# from fastapi import FastAPI, Depends, HTTPException, Query
-# from sqlalchemy.orm import Session
-# from typing import List, Optional
-#
-# from database import engine, Base, get_db
-# from models import Contact
-# from schemas import Contact as ContactSchema, ContactCreate, ContactUpdate
-# import crud
-#
-# app = FastAPI(
-#     title="Contacts API",
-#     description="REST API для зберігання та управління контактами з FastAPI та SQLAlchemy.",
-#     version="1.0.0",
-# )
-#
-# Base.metadata.create_all(bind=engine)
-#
-# @app.post("/contacts/", response_model=ContactSchema)
-# def create_new_contact(contact: ContactCreate, db: Session = Depends(get_db)):
-#     db_contact = crud.get_contact_by_email(db, email=contact.email)
-#     if db_contact:
-#         raise HTTPException(status_code=400, detail="Email already registered")
-#     return crud.create_contact(db=db, contact=contact)
-#
-# @app.get("/contacts/", response_model=List[ContactSchema])
-# def read_contacts(
-#     skip: int = 0,
-#     limit: int = 100,
-#     query: Optional[str] = Query(None, min_length=1, description="Search by first name, last name, or email"),
-#     db: Session = Depends(get_db)
-# ):
-#     if query:
-#         contacts = crud.search_contacts(db, query)
-#     else:
-#         contacts = crud.get_contacts(db, skip=skip, limit=limit)
-#     return contacts
-#
-# @app.get("/contacts/{contact_id}", response_model=ContactSchema)
-# def read_contact(contact_id: int, db: Session = Depends(get_db)):
-#     db_contact = crud.get_contact_by_id(db, contact_id=contact_id)
-#     if db_contact is None:
-#         raise HTTPException(status_code=404, detail="Contact not found")
-#     return db_contact
-#
-# @app.put("/contacts/{contact_id}", response_model=ContactSchema)
-# def update_existing_contact(contact_id: int, contact: ContactUpdate, db: Session = Depends(get_db)):
-#     db_contact = crud.update_contact(db, contact_id=contact_id, contact=contact)
-#     if db_contact is None:
-#         raise HTTPException(status_code=404, detail="Contact not found")
-#     return db_contact
-#
-# @app.delete("/contacts/{contact_id}", response_model=ContactSchema)
-# def delete_existing_contact(contact_id: int, db: Session = Depends(get_db)):
-#     db_contact = crud.delete_contact(db, contact_id=contact_id)
-#     if db_contact is None:
-#         raise HTTPException(status_code=404, detail="Contact not found")
-#     return db_contact
-#
-# @app.get("/contacts/birthdays/", response_model=List[ContactSchema])
-# def upcoming_birthdays(db: Session = Depends(get_db)):
-#     contacts = crud.get_upcoming_birthdays(db)
-#     return contacts
-
+# main.py
 from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List, Optional
-
+from fastapi_mail import FastMail, MessageSchema
+from fastapi import BackgroundTasks
+import email as mail_service
 from database import engine, Base, get_db
 from schemas import Contact as ContactSchema, ContactCreate, ContactUpdate, User as UserSchema, UserCreate, Token
 import crud, users, auth
 from models import User, Contact
+from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
+import redis
+import asyncio
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import UploadFile, File
+import cloudinary
+import cloudinary.uploader
+
 
 app = FastAPI(
     title="Contacts API",
@@ -77,6 +26,29 @@ app = FastAPI(
     version="1.0.0",
 )
 Base.metadata.create_all(bind=engine)
+
+# Налаштування Cloudinary
+cloudinary.config(
+    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+    api_key=settings.CLOUDINARY_API_KEY,
+    api_secret=settings.CLOUDINARY_API_SECRET
+)
+
+@app.patch("/users/avatar", response_model=UserSchema)
+async def update_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        result = cloudinary.uploader.upload(file.file, folder="avatars")
+        avatar_url = result.get("secure_url")
+        current_user.avatar = avatar_url
+        db.commit()
+        db.refresh(current_user)
+        return current_user
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 # Ендпоїнт для реєстрації
 @app.post("/signup", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
@@ -104,6 +76,15 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
         data={"sub": user.email}, expires_delta=timedelta(days=auth.REFRESH_TOKEN_EXPIRE_DAYS)
     )
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+# Налаштування Redis для FastAPILimiter
+@app.on_event("startup")
+async def startup():
+    redis_conn = redis.Redis(host='localhost', port=6379, db=0, encoding="utf-8", decode_responses=True)
+    await FastAPILimiter.init(redis_conn)
+
+@app.post("/contacts/", response_model=ContactSchema, status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(RateLimiter(times=2, minutes=5))])  # 2 запити на 5 хвилин
 
 # Оновлені ендпоїнти для контактів з авторизацією
 @app.post("/contacts/", response_model=ContactSchema, status_code=status.HTTP_201_CREATED)
@@ -136,3 +117,55 @@ def read_contact(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
     return contact
 
+
+@app.post("/signup", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+async def register_user(user: UserCreate, db: Session = Depends(get_db), background_tasks: BackgroundTasks):
+    db_user = users.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    new_user = users.create_user(db=db, user=user)
+
+    background_tasks.add_task(mail_service.send_email_verification, new_user.email, new_user.email,
+                              "http://localhost:8000")
+
+    return new_user
+
+
+@app.get("/verify-email/{token}")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise credentials_exception
+        if user.is_verified:
+            return {"message": "Email already verified"}
+
+        user.is_verified = True
+        db.commit()
+        return {"message": "Email successfully verified"}
+    except JWTError:
+        raise credentials_exception
+
+origins = [
+    "http://localhost",
+    "http://localhost:8000",
+    "http://your-frontend-domain.com",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
