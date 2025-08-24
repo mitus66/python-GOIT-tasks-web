@@ -9,3 +9,11 @@
 7. python manage.py createsuperuser
 8. python manage.py runserver
 
+# .env 
+MONGO_URI = "mongodb+srv://mitus66:IqE0HmNGp5H2MOy9@cluster0.qzzbjox.mongodb.net/mongodb_1?retryWrites=true&w=majority&appName=Cluster0"
+
+POSTGRES_DB = postgres
+POSTGRES_USER = postgres
+POSTGRES_PASSWORD = postgres
+POSTGRES_HOST = localhost
+POSTGRES_PORT = 5432
