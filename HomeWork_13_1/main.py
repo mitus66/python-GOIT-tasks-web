@@ -52,8 +52,12 @@ app = FastAPI(
 )
 
 # Створення таблиць у базі даних.
-models.Base.metadata.create_all(bind=engine)
-
+try:
+    models.Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Помилка при створенні таблиць: {e}")
+    # Ви можете підвищити HTTPException, якщо це критично
+    raise HTTPException(status_code=500, detail="Не вдалося підключитися до бази даних або створити таблиці.")
 # ---
 ## Конфігурація сервісів
 
