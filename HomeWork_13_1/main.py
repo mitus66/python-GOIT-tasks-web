@@ -119,7 +119,7 @@ def read_contact(
 
 
 @app.post("/signup", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
-async def register_user(user: UserCreate, db: Session = Depends(get_db), background_tasks: BackgroundTasks):
+async def register_user(user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     db_user = users.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
