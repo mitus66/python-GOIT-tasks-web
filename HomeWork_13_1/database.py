@@ -1,8 +1,19 @@
+import os
+from dotenv import load_dotenv
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/postgres"
+# Завантажуємо змінні середовища з файлу .env
+load_dotenv()
+
+# Використовуємо змінну DATABASE_URL з .env
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Перевірка на випадок, якщо змінна не була знайдена
+if not SQLALCHEMY_DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable not set")
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -16,6 +27,5 @@ def get_db():
         yield db
     finally:
         db.close()
-
 
 

@@ -16,11 +16,11 @@ import cloudinary
 import cloudinary.uploader
 from fastapi.middleware.cors import CORSMiddleware
 
-import email as mail_service
+import mail_service
 from database import engine, get_db
 from schemas import Contact as ContactSchema, ContactCreate, ContactUpdate, User as UserSchema, UserCreate, Token
 import crud, users, auth
-from models import User, Contact
+import models
 from config import settings
 
 # ---
