@@ -10,7 +10,7 @@ import os
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
-
+from models import User
 
 # Налаштування для хешування паролів
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -24,6 +24,20 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 # OAuth2PasswordBearer для отримання токена з заголовка
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+def create_email_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """
+    Генерує JWT-токен для підтвердження електронної пошти.
+    """
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        # Токен для пошти зазвичай діє довше, ніж access-токен,
+        # наприклад, 1 день.
+        expire = datetime.utcnow() + timedelta(days=1)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)

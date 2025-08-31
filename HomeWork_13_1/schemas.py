@@ -1,7 +1,34 @@
+# schemas.py
 from pydantic import BaseModel, Field, EmailStr
-from datetime import date
-# from pydantic import BaseModel, EmailStr
+from datetime import date, datetime
 from typing import Optional
+from pydantic import BaseModel, Field, EmailStr
+
+class UserUpdateSchema(BaseModel):
+    # Ви можете додати будь-які поля, які хочете дозволити оновлювати.
+    # Наприклад, тільки 'avatar'.
+    avatar: str | None = None
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: EmailStr
+    created_at: datetime
+    avatar: str | None = None
+
+    class Config:
+        from_attributes = True  # Це важливо для Pydantic V2.
+
+class User(BaseModel):
+    id: int
+    username: str
+    email: EmailStr
+    created_at: datetime
+    avatar: str | None = None  # Залежно від того, які поля у вас є
+
+    class Config:
+        from_attributes = True  # Pydantic V2: дозволяє моделі читати дані з атрибутів
+        # orm_mode = True       # Pydantic V1: робить те ж саме
 
 class ContactBase(BaseModel):
     first_name: str = Field(min_length=2, max_length=50)
@@ -22,9 +49,6 @@ class Contact(ContactBase):
 
     class Config:
         from_attributes = True
-
-
-
 
 
 class UserBase(BaseModel):
@@ -55,3 +79,4 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+

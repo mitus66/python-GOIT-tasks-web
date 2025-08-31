@@ -1,65 +1,57 @@
 # main.py
+import cloudinary
+from datetime import timedelta
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, File, UploadFile
+
+import jwt
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from typing import List
-from datetime import timedelta
-from jose import jwt, JWTError
+from sqlalchemy import text
+from cloudinary.uploader import upload
 
-from fastapi_limiter import FastAPILimiter
-from fastapi_limiter.depends import RateLimiter
-import redis
-import asyncio
-
-import cloudinary
-import cloudinary.uploader
-from fastapi.middleware.cors import CORSMiddleware
-
-import mail_service
 from database import engine, get_db
-from schemas import Contact as ContactSchema, ContactCreate, ContactUpdate, User as UserSchema, UserCreate, Token
-import crud, users, auth
-import models
+# from . import models, auth, crud, users, mail_service
+import models, auth, crud, users, mail_service
+from schemas import User, UserCreate, ContactCreate, Contact, Token
+# from models import User
+from schemas import User as UserSchema # Імпортуємо Pydantic-схему
+from rate_limiter import RateLimiter
 from config import settings
 
-# ---
-## Налаштування Redis для FastAPILimiter
+from models import User as UserModel # Імпортуємо модель бази даних
+from schemas import UserResponse # Імпортуємо Pydantic-схему для відповіді
+from schemas import UserUpdateSchema
+from auth import get_current_user
+from models import User as UserModel
+from schemas import UserResponse
 
-# Використання lifespan для ініціалізації ресурсів
+# Функція для запуску та зупинки застосунку
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Async context manager for managing application lifespan events.
-    Initializes Redis connection for FastAPILimiter on startup.
+    Handle startup and shutdown events for the application.
     """
-    # Логіка, що виконується під час запуску (startup)
-    redis_conn = redis.Redis(host='redis', port=6379, db=0, encoding="utf-8", decode_responses=True)
-    await FastAPILimiter.init(redis_conn)
-    print("FastAPILimiter initialized with Redis.")
+    # Створюємо таблиці в базі даних при старті.
+    print("Creating database tables...")
+    try:
+        models.Base.metadata.create_all(bind=engine)
+        print("Database tables created successfully!")
+    except Exception as e:
+        print(f"Error creating database tables: {e}")
+        # Застосунок може не працювати без таблиць, тому можна завершити його
+        raise RuntimeError("Failed to connect to database or create tables.")
     yield
-    # Логіка, що виконується під час зупинки (shutdown)
-    # Тут можна додати очищення ресурсів, якщо потрібно
+    # Логіка для вимкнення, якщо потрібно
 
-# ---
-## Ініціалізація FastAPI
-
+# Ініціалізація FastAPI
 app = FastAPI(
     title="Contacts API",
     description="REST API для зберігання та управління контактами з FastAPI та SQLAlchemy.",
     version="1.0.0",
-    lifespan=lifespan # Використання lifespan замість app.on_event("startup")
+    lifespan=lifespan
 )
-
-# Створення таблиць у базі даних.
-try:
-    models.Base.metadata.create_all(bind=engine)
-except Exception as e:
-    print(f"Помилка при створенні таблиць: {e}")
-    # Ви можете підвищити HTTPException, якщо це критично
-    raise HTTPException(status_code=500, detail="Не вдалося підключитися до бази даних або створити таблиці.")
-# ---
-## Конфігурація сервісів
 
 # Налаштування Cloudinary
 cloudinary.config(
@@ -72,7 +64,7 @@ cloudinary.config(
 origins = [
     "http://localhost",
     "http://localhost:8000",
-    "http://your-frontend-domain.com",
+    settings.FRONTEND_URL,
 ]
 
 app.add_middleware(
@@ -84,18 +76,43 @@ app.add_middleware(
 )
 
 # ---
-## Ендпоїнти користувачів
+## Ендпоїнти загальні та для користувачів
 
-@app.patch("/users/avatar", response_model=UserSchema)
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the Contacts API!"}
+
+@app.get("/api/healthchecker")
+def healthchecker(db: Session = Depends(get_db)):
+    try:
+        # Перевіряємо з'єднання з базою даних
+        result = db.execute(text("SELECT 1")).scalar()
+        if result == 1:
+            return {"message": "Database is healthy!"}
+        else:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Database is not healthy")
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error connecting to the database")
+
+
+# @app.patch("/users/avatar", response_model=User)
+# @app.patch("/users/avatar", response_model=UserSchema)
+@app.patch("/users/avatar", response_model=UserResponse)
 async def update_avatar(
-    file: UploadFile = File(...),
-    current_user: User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db)
-):
+        body: UserUpdateSchema,
+        current_user: UserModel = Depends(get_current_user),
+        db: Session = Depends(get_db)):
+# async def update_avatar(
+#     file: UploadFile = File(...),
+#     current_user: User = Depends(auth.get_current_user),
+#     db: Session = Depends(get_db)
+# ):
     """
     Update the user's avatar by uploading a file to Cloudinary.
     """
     try:
+        # Uploading the file to Cloudinary
         result = cloudinary.uploader.upload(file.file, folder="avatars")
         avatar_url = result.get("secure_url")
         current_user.avatar = avatar_url
@@ -105,8 +122,7 @@ async def update_avatar(
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
-
-@app.post("/signup", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+@app.post("/signup", response_model=User, status_code=status.HTTP_201_CREATED)
 async def register_user(user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Register a new user and send a verification email.
@@ -120,7 +136,6 @@ async def register_user(user: UserCreate, background_tasks: BackgroundTasks, db:
     background_tasks.add_task(mail_service.send_email_verification, new_user.email, new_user.email, settings.FRONTEND_URL)
 
     return new_user
-
 
 @app.get("/verify-email/{token}")
 def verify_email(token: str, db: Session = Depends(get_db)):
@@ -146,9 +161,8 @@ def verify_email(token: str, db: Session = Depends(get_db)):
         user.is_verified = True
         db.commit()
         return {"message": "Email successfully verified"}
-    except JWTError:
+    except jwt.JWTError:
         raise credentials_exception
-
 
 @app.post("/token", response_model=Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -173,8 +187,7 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
 
 # ---
 ## Ендпоїнти контактів
-
-@app.post("/contacts/", response_model=ContactSchema, status_code=status.HTTP_201_CREATED,
+@app.post("/contacts/", response_model=Contact, status_code=status.HTTP_201_CREATED,
           dependencies=[Depends(RateLimiter(times=2, minutes=5))])
 def create_new_contact(
     contact: ContactCreate,
@@ -186,8 +199,7 @@ def create_new_contact(
     """
     return crud.create_contact_for_user(db=db, contact=contact, user_id=current_user.id)
 
-
-@app.get("/contacts/", response_model=List[ContactSchema])
+@app.get("/contacts/", response_model=list[Contact])
 def read_contacts(
     skip: int = 0,
     limit: int = 100,
@@ -199,8 +211,7 @@ def read_contacts(
     """
     return crud.get_user_contacts(db, user_id=current_user.id, skip=skip, limit=limit)
 
-
-@app.get("/contacts/{contact_id}", response_model=ContactSchema)
+@app.get("/contacts/{contact_id}", response_model=Contact)
 def read_contact(
     contact_id: int,
     db: Session = Depends(get_db),
@@ -212,4 +223,33 @@ def read_contact(
     contact = crud.get_contact_by_id_for_user(db, contact_id, current_user.id)
     if not contact:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    return contact
+
+@app.put("/contacts/{contact_id}", response_model=Contact)
+def update_contact(
+    contact_id: int,
+    contact_update: ContactCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth.get_current_user)
+):
+    """
+    Update an existing contact for the current user.
+    """
+    contact = crud.update_contact_for_user(db, contact_id, current_user.id, contact_update)
+    if not contact:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found or does not belong to the user")
+    return contact
+
+@app.delete("/contacts/{contact_id}", response_model=Contact)
+def delete_contact(
+    contact_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth.get_current_user)
+):
+    """
+    Delete a contact for the current user.
+    """
+    contact = crud.delete_contact_for_user(db, contact_id, current_user.id)
+    if not contact:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found or does not belong to the user")
     return contact

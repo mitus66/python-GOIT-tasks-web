@@ -20,7 +20,7 @@ COPY wait-for-it.sh /usr/local/bin/wait-for-it.sh
 RUN chmod +x /usr/local/bin/wait-for-it.sh
 
 # Копіювання всього іншого коду застосунку в контейнер
-COPY . .
+COPY . /app
 
 # Відкриття порту 8000, на якому буде працювати Uvicorn
 EXPOSE 8000

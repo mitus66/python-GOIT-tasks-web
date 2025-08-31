@@ -1,10 +1,10 @@
+# database.py
 import os
 from dotenv import load_dotenv
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
-
 # Завантажуємо змінні середовища з файлу .env
 load_dotenv()
 
@@ -27,5 +27,3 @@ def get_db():
         yield db
     finally:
         db.close()
-
-

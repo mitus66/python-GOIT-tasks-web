@@ -1,8 +1,4 @@
 services:
-  web:
-    image: "nginx:latest"
-    ports:
-      - "8080:80"
   db:
     image: postgres:14-alpine
     restart: always
@@ -10,29 +6,20 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
     ports:
       - "5432:5432"
-
-  redis:
-    image: redis:alpine
-    restart: always
-    ports:
-      - "6379:6379"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
 
   app:
     build: .
-    # Оновлена команда для використання wait-for-it.sh
-    command: sh -c "/usr/local/bin/wait-for-it.sh db:5432 -- uvicorn main:app --host 0.0.0.0 --port 8000"
-    restart: always
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - .:/app
     ports:
       - "8000:8000"
     depends_on:
       - db
-      - redis
     env_file:
       - .env
 
