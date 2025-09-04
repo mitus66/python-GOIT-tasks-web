@@ -2,7 +2,7 @@
 from pydantic import BaseModel, Field, EmailStr
 from datetime import date, datetime
 from typing import Optional
-from pydantic import BaseModel, Field, EmailStr
+
 
 class UserUpdateSchema(BaseModel):
     # Ви можете додати будь-які поля, які хочете дозволити оновлювати.
@@ -41,8 +41,12 @@ class ContactBase(BaseModel):
 class ContactCreate(ContactBase):
     pass
 
-class ContactUpdate(ContactBase):
-    pass
+class ContactUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone_number: Optional[str] = None
+    birthday: Optional[date] = None
 
 class Contact(ContactBase):
     id: int

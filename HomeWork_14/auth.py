@@ -1,16 +1,16 @@
 # auth.py
+from schemas import TokenData
+import os
 from datetime import datetime, timedelta
 from typing import Optional
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from schemas import TokenData
-import os
-from fastapi import Depends, HTTPException, status
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from database import get_db
-from models import User
+from database.db import get_db
+from database.models import User # <-- Змінено тут
+from config import settings
 
 # Налаштування для хешування паролів
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

@@ -1,8 +1,10 @@
 # mail_service.py
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from pydantic import EmailStr
-from config import settings
 from jinja2 import Environment, FileSystemLoader
+from pathlib import Path
+from auth import create_email_token # <-- Цей імпорт залишаємо
+from config import settings
 
 # Правильне місце для імпорту.
 # Функція create_email_token тепер буде доступна всьому модулю mail_service.py
